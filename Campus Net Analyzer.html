@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Campus Net Analyzer – University Network Connectivity</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eaf0f4;--panel:#fff;--ink:#14232e;--mut:#5b6b77;--line:#c5d2db;--acc:#0e7c86;--bad:#c8372d;--path:#e08a00;--ok:#2f8f4e;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1a22;--panel:#16252f;--ink:#e6eef3;--mut:#93a5b2;--line:#2c4150;--acc:#3cc4cf;--bad:#ff6b5e;--path:#ffb22e;--ok:#5fd186}}
+:root[data-theme="dark"]{--bg:#0f1a22;--panel:#16252f;--ink:#e6eef3;--mut:#93a5b2;--line:#2c4150;--acc:#3cc4cf;--bad:#ff6b5e;--path:#ffb22e;--ok:#5fd186}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Source Sans 3",system-ui,sans-serif}
+h1,h2,h3{font-family:"Bricolage Grotesque",system-ui,sans-serif;margin:0;line-height:1.15}
+header{padding:28px 20px 8px;max-width:1180px;margin:auto}
+h1{font-size:clamp(28px,5vw,46px);font-weight:800}
+header p{max-width:62ch;color:var(--mut);margin:8px 0 0}
+main{max-width:1180px;margin:auto;padding:16px 20px 40px;display:grid;grid-template-columns:minmax(0,1.6fr) minmax(280px,1fr);gap:18px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.box h2{font-size:19px;margin-bottom:10px}
+svg{width:100%;height:auto;display:block}
+.edge line.v{stroke:var(--acc);stroke-width:2.5}
+.edge.down line.v{stroke:var(--bad);stroke-dasharray:6 5;opacity:.7}
+.edge.on line.v{stroke:var(--path);stroke-width:5}
+.edge line.hit{stroke:transparent;stroke-width:16;cursor:pointer}
+.edge text{font-size:11px;fill:var(--mut);paint-order:stroke;stroke:var(--panel);stroke-width:4px}
+.node{cursor:pointer}
+.node circle{fill:var(--panel);stroke:var(--acc);stroke-width:3}
+.node.down circle{stroke:var(--bad);fill:color-mix(in srgb,var(--bad) 18%,var(--panel))}
+.node.on circle{stroke:var(--path);stroke-width:5}
+.node.spof circle{stroke:var(--bad);stroke-width:5}
+.node text{font-size:12px;fill:var(--ink);text-anchor:middle;font-weight:600}
+.node:focus-visible circle,button:focus-visible,select:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+label{display:flex;flex-direction:column;font-size:13px;color:var(--mut);flex:1;min-width:110px}
+select{font:inherit;padding:7px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+button{font:inherit;font-weight:600;padding:8px 14px;border-radius:6px;border:1px solid var(--acc);background:var(--acc);color:#fff;cursor:pointer}
+button.alt{background:transparent;color:var(--acc)}
+:root:not([data-theme="light"]) button:not(.alt){color:#06242a}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:0}
+.stats div{border-left:3px solid var(--acc);padding-left:10px}
+.stats b{display:block;font-size:24px;font-family:"Bricolage Grotesque",sans-serif}
+.stats span{font-size:13px;color:var(--mut)}
+#out{min-height:70px;margin:0}
+.bad{color:var(--bad);font-weight:600}.good{color:var(--ok);font-weight:600}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--mut);margin-top:8px}
+.legend i{display:inline-block;width:18px;height:0;border-top:4px solid;vertical-align:middle;margin-right:5px}
+.wide{grid-column:1/-1}
+.wide p,.wide li{max-width:80ch}
+code{background:var(--bg);padding:1px 5px;border-radius:4px}
+@media (prefers-reduced-motion:no-preference){.edge line.v{transition:stroke .2s}}
+</style>
+</head>
+<body>
+<header>
+<h1>Campus Net Analyzer</h1>
+<p>A university network modelled as a weighted graph. Pick two points to trace a route, then click any device or link to take it offline and see what breaks.</p>
+</header>
+<main>
+<section class="box" aria-label="Network graph">
+<svg id="g" viewBox="0 0 800 500" role="img" aria-label="Campus network graph"></svg>
+<div class="legend"><span><i style="color:var(--acc)"></i>Link up</span><span><i style="color:var(--bad);border-top-style:dashed"></i>Link/device down</span><span><i style="color:var(--path)"></i>Chosen route</span><span>Number on a link = latency in ms</span></div>
+</section>
+<aside style="display:grid;gap:18px;align-content:start">
+<section class="box">
+<h2>Trace a route</h2>
+<div class="row"><label>From<select id="s"></select></label><label>To<select id="t"></select></label></div>
+<div class="row"><label>Optimise for<select id="m"><option value="lat">Lowest latency (Dijkstra)</option><option value="hop">Fewest hops (BFS)</option></select></label></div>
+<div class="row"><button id="go">Find route</button><button class="alt" id="spof">Show single points of failure</button><button class="alt" id="reset">Restore all</button></div>
+<p id="out" aria-live="polite">Choose two points and press Find route.</p>
+</section>
+<section class="box">
+<h2>Network health</h2>
+<div class="stats">
+<div><b id="n1">0</b><span>Devices online</span></div>
+<div><b id="n2">0</b><span>Links online</span></div>
+<div><b id="n3">0</b><span>Connected segments</span></div>
+<div><b id="n4">0%</b><span>Reachable from ISP</span></div>
+</div>
+</section>
+</aside>
+<section class="box wide">
+<h2>How it works</h2>
+<ul>
+<li><b>Model:</b> devices are vertices, cables are undirected edges weighted by latency (ms). Stored as an adjacency list, rebuilt after every failure.</li>
+<li><b>Connectivity:</b> a BFS flood fill counts connected components. More than one segment means part of the campus is cut off.</li>
+<li><b>Routing:</b> Dijkstra finds the lowest-latency path in O(V²); BFS finds the fewest-hop path in O(V+E).</li>
+<li><b>Resilience:</b> Tarjan's algorithm finds articulation points, the devices whose failure splits the network, in O(V+E) using discovery time and low-link values.</li>
+</ul>
+<p>Extension ideas: import real topology from SNMP/traceroute data, add bandwidth-aware routing, or compute edge betweenness to rank critical links.</p>
+</section>
+</main>
+<script>
+const N=[["isp","ISP Gateway",400,40],["fw","Firewall",400,115],["core","Core Router",400,195],["dc","Data Center",400,300],["d1","Academic Switch",200,275],["d2","Hostel Switch",600,275],["cs","CS Lab",90,400],["lib","Library",230,430],["admin","Admin Block",340,440],["ha","Hostel A",490,440],["hb","Hostel B",620,430],["cafe","Canteen Wi-Fi",730,350]];
+const E=[["isp","fw",5],["fw","core",1],["core","dc",1],["core","d1",2],["core","d2",2],["d1","cs",3],["d1","lib",3],["d1","admin",4],["lib","admin",2],["admin","dc",3],["d2","ha",3],["d2","hb",3],["ha","hb",2],["d2","cafe",5],["hb","cafe",4]];
+const id2i={};N.forEach((n,i)=>id2i[n[0]]=i);
+const dn=new Set(),de=new Set();let route=null,spofs=new Set();
+const $=x=>document.getElementById(x);
+["s","t"].forEach(k=>$(k).innerHTML=N.map(n=>`<option value="${n[0]}">${n[1]}</option>`).join(""));
+$("s").value="cs";$("t").value="hb";
+function adj(){const a={};N.forEach(n=>{if(!dn.has(n[0]))a[n[0]]=[]});
+E.forEach((e,i)=>{if(!dn.has(e[0])&&!dn.has(e[1])&&!de.has(i)){a[e[0]].push([e[1],e[2],i]);a[e[1]].push([e[0],e[2],i])}});return a}
+function reach(a,s){const seen=new Set([s]),q=[s];while(q.length){const u=q.shift();a[u].forEach(([v])=>{if(!seen.has(v)){seen.add(v);q.push(v)}})}return seen}
+function comps(a){const seen=new Set();let c=0;for(const u in a){if(!seen.has(u)){c++;reach(a,u).forEach(x=>seen.add(x))}}return c}
+function shortest(a,s,t,mode){const d={},p={},done=new Set();for(const u in a)d[u]=Infinity;d[s]=0;
+while(true){let u=null;for(const k in d)if(!done.has(k)&&d[k]<Infinity&&(u===null||d[k]<d[u]))u=k;if(u===null||u===t)break;done.add(u);
+a[u].forEach(([v,w,ei])=>{const nd=d[u]+(mode==="hop"?1:w);if(nd<d[v]){d[v]=nd;p[v]=[u,ei]}})}
+if(d[t]===Infinity)return null;const nodes=[t],edges=[];let c=t;while(c!==s){const[u,ei]=p[c];edges.push(ei);nodes.push(u);c=u}
+return{nodes:nodes.reverse(),edges,cost:d[t]}}
+function articulation(a){const disc={},low={},res=new Set();let T=0;
+function dfs(u,par){disc[u]=low[u]=++T;let ch=0;
+a[u].forEach(([v])=>{if(v===par)return;if(disc[v]){low[u]=Math.min(low[u],disc[v])}else{ch++;dfs(v,u);low[u]=Math.min(low[u],low[v]);if(par!==null&&low[v]>=disc[u])res.add(u)}});
+if(par===null&&ch>1)res.add(u)}
+for(const u in a)if(!disc[u])dfs(u,null);return res}
+function draw(){const g=$("g");let h="";
+E.forEach((e,i)=>{const A=N[id2i[e[0]]],B=N[id2i[e[1]]];const dead=de.has(i)||dn.has(e[0])||dn.has(e[1]);
+const on=route&&route.edges.includes(i);
+h+=`<g class="edge ${dead?"down":""} ${on?"on":""}" data-e="${i}"><line class="v" x1="${A[2]}" y1="${A[3]}" x2="${B[2]}" y2="${B[3]}"/><line class="hit" x1="${A[2]}" y1="${A[3]}" x2="${B[2]}" y2="${B[3]}"><title>Click to toggle this link</title></line><text x="${(A[2]+B[2])/2}" y="${(A[3]+B[3])/2+4}" text-anchor="middle">${e[2]}</text></g>`});
+N.forEach(n=>{const on=route&&route.nodes.includes(n[0]);
+h+=`<g class="node ${dn.has(n[0])?"down":""} ${on?"on":""} ${spofs.has(n[0])?"spof":""}" data-n="${n[0]}" tabindex="0" role="button" aria-label="${n[1]}, ${dn.has(n[0])?"offline":"online"}"><circle cx="${n[2]}" cy="${n[3]}" r="20"/><text x="${n[2]}" y="${n[3]+38}">${n[1]}</text></g>`});
+g.innerHTML=h;stats()}
+function stats(){const a=adj(),on=Object.keys(a).length;
+let le=0;for(const u in a)le+=a[u].length;
+$("n1").textContent=on+"/"+N.length;$("n2").textContent=le/2+"/"+E.length;
+$("n3").textContent=on?comps(a):0;
+$("n4").textContent=a.isp?Math.round(reach(a,"isp").size/N.length*100)+"%":"0%"}
+function clear(){route=null;spofs=new Set()}
+$("g").addEventListener("click",e=>{const n=e.target.closest(".node"),l=e.target.closest(".edge");
+if(n){const k=n.dataset.n;dn.has(k)?dn.delete(k):dn.add(k)}else if(l){const k=+l.dataset.e;de.has(k)?de.delete(k):de.add(k)}else return;
+clear();$("out").textContent="Topology changed. Run Find route again.";draw()});
+$("g").addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.closest(".node")){e.preventDefault();e.target.closest(".node").dispatchEvent(new MouseEvent("click",{bubbles:true}))}});
+$("go").onclick=()=>{const s=$("s").value,t=$("t").value,a=adj();spofs=new Set();
+if(s===t){$("out").textContent="Choose two different points.";return}
+if(!a[s]||!a[t]){route=null;$("out").innerHTML=`<span class="bad">${N[id2i[!a[s]?s:t]][1]} is offline.</span> Restore it or pick another endpoint.`;draw();return}
+const r=shortest(a,s,t,$("m").value);route=r;
+if(!r)$("out").innerHTML=`<span class="bad">No route.</span> ${N[id2i[s]][1]} and ${N[id2i[t]][1]} are in separate segments.`;
+else{const lat=r.edges.reduce((x,i)=>x+E[i][2],0);$("out").innerHTML=`<span class="good">Route found:</span> ${r.nodes.map(x=>N[id2i[x]][1]).join(" → ")}<br>${r.nodes.length-1} hops, ${lat} ms total latency.`}
+draw()};
+$("spof").onclick=()=>{route=null;spofs=articulation(adj());
+$("out").innerHTML=spofs.size?`<span class="bad">${spofs.size} single point${spofs.size>1?"s":""} of failure:</span> ${[...spofs].map(x=>N[id2i[x]][1]).join(", ")}. Losing any one splits the network.`:`<span class="good">No single point of failure</span> in the current topology.`;draw()};
+$("reset").onclick=()=>{dn.clear();de.clear();clear();$("out").textContent="All devices and links restored.";draw()};
+draw();
+</script>
+</body>
+</html>
